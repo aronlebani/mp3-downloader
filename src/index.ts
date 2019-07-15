@@ -28,7 +28,6 @@ export class Mp3Downloader {
     this.getBitRate();
     this.getStartByte(start);
     this.getEndByte(end);
-    console.debug(this.frequency, this.bitRate, this.startByte, this.endByte);
     await this.sendRequest(this.url, out);
   }
 
