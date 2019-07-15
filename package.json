@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/aronlebani/mp3-downloader#readme",
   "dependencies": {
+    "@types/node": "^12.6.2",
     "axios": "^0.19.0",
     "typescript": "^3.5.3"
   }
