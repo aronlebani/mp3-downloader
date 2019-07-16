@@ -13,16 +13,21 @@ export class Mp3Downloader {
   
   private frequencyTable: Array<number> = [44100, 48000, 32000];
 
+  private modeTable: Array<number> = [2, 2, 2, 1];
+
+  private samplesPerFrame: number = 1152;
+
   constructor(url: string) {
     this.url = url;
   }
 
   public async download(start: Seconds, end: Seconds, path: string): Promise<void> {
-    const bytes = await this.getFirstNBytes(16);
-    const header: Mp3Header = this.findFirstHeader(bytes);
-    const bitRate = this.getBitRate(header);
-    const startByte: number = this.getStartByte(start, bitRate);
-    const endByte: number = this.getEndByte(end, bitRate);
+    const bytes = await this.getFirstNBytes(1048576);
+    const [header, offset]: [Mp3Header, number] = this.findFirstHeader(bytes);
+    const bitRate: number = this.getBitRate(header);
+    const frequency: number = this.getFrequency(header);
+    const startByte: number = this.getStartByte(start, bitRate, frequency, offset);
+    const endByte: number = this.getEndByte(end, bitRate, frequency, offset);
     await this.sendRequest(this.url, path, startByte, endByte);
   }
 
@@ -55,30 +60,34 @@ export class Mp3Downloader {
     return Uint8Array.from(response.data);
   }
 
-  private getStartByte(startTime: Seconds, bitRate: number): number {
-    return bitRate * 1024 * startTime / 8;
+  private getStartByte(startTime: Seconds, bitRate: number, frequency: number, offset: number): number {
+    return Math.floor(startTime * ( bitRate * 1024 ) * ( 1 - this.samplesPerFrame / frequency ) / 8 + offset);
   }
 
-  private getEndByte(endTime: Seconds, bitRate: number): number {
-    return bitRate * 1024 * endTime / 8;
+  private getEndByte(endTime: Seconds, bitRate: number, frequency: number, offset: number): number {
+    return Math.ceil(endTime * ( bitRate * 1024 ) * ( 1 - this.samplesPerFrame / frequency ) / 8 + offset);
   }
 
-  private getBitRate(bytes): number {
+  private getBitRate(bytes: Mp3Header): number {
     return this.bitRateTable[bytes[2] >> 4];
   }
 
-  private getFrequency(bytes): number {
-    return  this.frequencyTable[bytes[2] & 0xF >> 2];
+  private getFrequency(bytes: Mp3Header): number {
+    return this.frequencyTable[bytes[2] & 0xF >> 2];
   }
 
-  private findFirstHeader(bytes): Mp3Header {
+  private getChannels(bytes: Mp3Header): number {
+    return this.modeTable[bytes[3] >> 6];
+  }
+
+  private findFirstHeader(bytes): [Mp3Header, number] {
     for (let i: number = 0; i < bytes.length; i++) {
       const header: Mp3Header = bytes.slice(i, i + 4);
       if (this.verifyHeader(header)) {
-        return header;
+        return [header, i];
       }
     }
-    throw new Error('Header not found');
+    throw new Error('Header not found or not a valid mp3 file');
   }
 
   private verifyHeader(bytes: Mp3Header): boolean {
@@ -86,14 +95,14 @@ export class Mp3Downloader {
   }
 
   private verifySyncWord(bytes: Mp3Header): boolean {
-    return bytes[0] == 0xFF && bytes[1] >> 4 == 0xF;
+    return ( bytes[0] == 0xFF ) && ( bytes[1] >> 4 == 0xF );
   }
 
   private verifyVersion(bytes: Mp3Header): boolean {
-    return ( bytes[1] & 0x8 >> 3 ) == 0x1;
+    return ( ( bytes[1] & 0x8 ) >> 3 ) == 0x1;
   }
 
   private verifyLayer(bytes: Mp3Header): boolean {
-    return ( bytes[1] & 0x6 >> 1 ) == 0x1;
+    return ( ( bytes[1] & 0x6 ) >> 1 ) == 0x1;
   }
 }
