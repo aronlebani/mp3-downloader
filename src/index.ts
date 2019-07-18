@@ -22,21 +22,26 @@ export class Mp3Downloader {
   }
 
   public async download(start: Seconds, end: Seconds, path: string): Promise<void> {
-    const bytes = await this.getFirstNBytes(1048576);
+    // Poll 1 kb of data from 1 Mb into the file -> skip over potential metadata at the start of 
+    // the file
+    const bytes: Uint8Array = await this.downloadBytes(1048576, 1049600);
     const [header, offset]: [Mp3Header, number] = this.findFirstHeader(bytes);
     const bitRate: number = this.getBitRate(header);
     const frequency: number = this.getFrequency(header);
     const startByte: number = this.getStartByte(start, bitRate, frequency, offset);
     const endByte: number = this.getEndByte(end, bitRate, frequency, offset);
-    await this.sendRequest(this.url, path, startByte, endByte);
+    await this.streamBytes(this.url, path, startByte, endByte);
   }
 
-  private async sendRequest(url: string, out: string, startByte: number, endByte: number): Promise<void> {
+  private async streamBytes(url: string,
+                            out: string,
+                            from: number,
+                            to: number): Promise<void> {
     const writer = fs.createWriteStream(out);
 
     const response = await axios.get(url, {
       headers: {
-        'Range': `bytes=${startByte}-${endByte}`,
+        'Range': `bytes=${from}-${to}`,
       },
       responseType: 'stream',
     });
@@ -49,10 +54,10 @@ export class Mp3Downloader {
     });
   }
 
-  private async getFirstNBytes(n: number): Promise<Uint8Array> {
+  private async downloadBytes(from: number, to: number): Promise<Uint8Array> {
     const response = await axios.get(this.url, {
       headers: {
-        'Range': `bytes=0-${n}`,
+        'Range': `bytes=${from}-${to}`,
       },
       responseType: 'arraybuffer',
     });
@@ -60,12 +65,27 @@ export class Mp3Downloader {
     return Uint8Array.from(response.data);
   }
 
-  private getStartByte(startTime: Seconds, bitRate: number, frequency: number, offset: number): number {
-    return Math.floor(startTime * ( bitRate * 1024 ) * ( 1 - this.samplesPerFrame / frequency ) / 8 + offset);
+  private async getFileSizeBytes(): Promise<number> {
+    const response = await axios.head(this.url);
+    return Number(response.headers['content-length']);
   }
 
-  private getEndByte(endTime: Seconds, bitRate: number, frequency: number, offset: number): number {
-    return Math.ceil(endTime * ( bitRate * 1024 ) * ( 1 - this.samplesPerFrame / frequency ) / 8 + offset);
+  private getStartByte(startTime: Seconds,
+                       bitRate: number,
+                       frequency: number,
+                       offset: number): number {
+    return Math.floor(
+      startTime * ( bitRate * 1024 ) * ( 1 - this.samplesPerFrame / frequency ) / 8 + offset
+    );
+  }
+
+  private getEndByte(endTime: Seconds,
+                     bitRate: number,
+                     frequency: number,
+                     offset: number): number {
+    return Math.ceil(
+      endTime * ( bitRate * 1024 ) * ( 1 - this.samplesPerFrame / frequency ) / 8 + offset
+    );
   }
 
   private getBitRate(bytes: Mp3Header): number {
@@ -80,7 +100,7 @@ export class Mp3Downloader {
     return this.modeTable[bytes[3] >> 6];
   }
 
-  private findFirstHeader(bytes): [Mp3Header, number] {
+  private findFirstHeader(bytes: Uint8Array): [Mp3Header, number] {
     for (let i: number = 0; i < bytes.length; i++) {
       const header: Mp3Header = bytes.slice(i, i + 4);
       if (this.verifyHeader(header)) {
