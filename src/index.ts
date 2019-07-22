@@ -4,6 +4,12 @@ import axios from 'axios';
 type Seconds = number;
 type Mp3Header = Uint8Array;
 
+interface Mp3Data {
+  frequency: number;
+  bitRate: number;
+  offset: number;
+}
+
 export class Mp3Downloader {
 
   private url: string;
@@ -21,15 +27,20 @@ export class Mp3Downloader {
     this.url = url;
   }
 
-  public async download(start: Seconds, end: Seconds, path: string): Promise<void> {
+  public async getMp3Data(): Promise<Mp3Data> {
     // Poll 1 kb of data from 1 Mb into the file -> skip over potential metadata at the start of 
     // the file
     const bytes: Uint8Array = await this.downloadBytes(1048576, 1049600);
     const [header, offset]: [Mp3Header, number] = this.findFirstHeader(bytes);
     const bitRate: number = this.getBitRate(header);
     const frequency: number = this.getFrequency(header);
-    const startByte: number = this.getStartByte(start, bitRate, frequency, offset);
-    const endByte: number = this.getEndByte(end, bitRate, frequency, offset);
+
+    return { frequency, bitRate, offset };
+  }
+
+  public async download(start: Seconds, end: Seconds, path: string, data: Mp3Data): Promise<void> {
+    const startByte: number = this.getStartByte(start, data.bitRate, data.frequency, data.offset);
+    const endByte: number = this.getEndByte(end, data.bitRate, data.frequency, data.offset);
     await this.streamBytes(this.url, path, startByte, endByte);
   }
 
