@@ -1,4 +1,4 @@
-import { Mp3Downloader } from './index';
+import { Mp3Downloader, Mp3Data } from './index';
 
 (async () => {
   const urls: Array<string> = [
@@ -10,6 +10,7 @@ import { Mp3Downloader } from './index';
   for (let i: number = 0; i < urls.length; i++) {
     console.log(urls[i])
     const mp3Downloader: Mp3Downloader = new Mp3Downloader(urls[i]);
-    await mp3Downloader.download(360, 375, `./test_${i}.mp3`);  
+    const data: Mp3Data = await mp3Downloader.getMp3Data();
+    await mp3Downloader.download(360, 375, `./test_${i}.mp3`, data);  
   }
 })();

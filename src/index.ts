@@ -4,7 +4,7 @@ import axios from 'axios';
 type Seconds = number;
 type Mp3Header = Uint8Array;
 
-interface Mp3Data {
+export interface Mp3Data {
   frequency: number;
   bitRate: number;
   offset: number;
